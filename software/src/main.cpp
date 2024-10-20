@@ -56,7 +56,8 @@ void singleStreamReaderSetup() {
 }
 
 void sensorSetup() {
-  singleStreamReaderSetup();
+  gStream = new MUARTSingleStream(&gMultiuart, 0);
+  gStream->begin(9600);
   gSensor = new A02YYUWviaUARTStream(gStream, 8, true);
 
   // Set up debugger interface
