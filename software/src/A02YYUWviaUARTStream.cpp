@@ -125,7 +125,7 @@ int A02YYUWviaUARTStream::readSensorData(byte* data) {
   // Read the rest of the packet
   if (mSensorUART->available() >= A02YYUWviaUARTStreamNS::PACKET_SIZE - 1) {
     // Note: Pointer arithmetic below to ensure we're only filling the byte array _after_ the first byte.
-    mSensorUART->readBytes(++data, A02YYUWviaUARTStreamNS::PACKET_SIZE - 1);
+    mSensorUART->readBytes(data+1, A02YYUWviaUARTStreamNS::PACKET_SIZE - 1);
   } else {
     return -3; // Incomplete packet
   }
