@@ -15,11 +15,15 @@
  */
 
 // Multiuart board interface instance - Constructor argument is Chip Select pin number
-MULTIUART gMultiuart(53);
-// Single stream abstraction for one of the UART devices attached to the MULTIUART board
-MUARTSingleStream* gStream;
+MULTIUART gMultiuart = MULTIUART(53);
+// Single stream abstraction for one of the UART devices attached to the MULTIUART board - sensor 1
+MUARTSingleStream* gStream1;
+// Single stream abstraction for one of the UART devices attached to the MULTIUART board - sensor 2
+MUARTSingleStream* gStream2;
 // The UART communicating sensor we're using to test this interface
-A02YYUWviaUARTStream* gSensor;
+A02YYUW::A02YYUWviaUARTStream* gSensor1;
+// The second UART communicating sensor we're using to test this interface
+A02YYUW::A02YYUWviaUARTStream* gSensor2;
 // Debugger for output
 SerialDebugger* gDebugger;
 
@@ -34,38 +38,68 @@ String formatByteToIntelString(uint8_t byte) {
   return result;
 }
 
+/*******************
+ * Setup functions
+ *******************/
+void setupSerial() {
+  // Set up user Serial comms
+  Serial.begin(115200);
+  while (!Serial);
+}
+
+// A02YYUWviaUARTStream* setupSensor(int index, uint8_t modeSelectPin) {
+//   MUARTSingleStream* stream = new MUARTSingleStream(&gMultiuart, index);
+//   stream->begin(9600);
+//   return new A02YYUWviaUARTStream(stream, modeSelectPin, true);
+// }
+
+void setupDebugger() {
+  // Set up debugger interface
+  gDebugger = new SerialDebugger(115200);
+}
+
 // Setup for MULTIUART on its own
 void simpleDirectHexReaderSetup() {
   // Initialise the UART baud rates
   // 0=1200, 1=2400, 2=4800, 3=9600, 4=19200, 5=38400, 6=57600, 7=115200
   gMultiuart.SetBaud(0, 3);		// UART0 = 9600 Baud
 
-  // Set up user Serial comms
-  Serial.begin(115200);
-  while (!Serial) {};
+  setupSerial();
 }
 
 // Setup for MULTIUART abstracted to a character Stream
 void singleStreamReaderSetup() {
-  gStream = new MUARTSingleStream(&gMultiuart, 0);
-  gStream->begin(9600);
+  gStream1 = new MUARTSingleStream(&gMultiuart, 0);
+  gStream1->begin(9600);
 
-  // Set up user Serial comms
-  Serial.begin(115200);
-  while (!Serial) {};
+  setupSerial();
 }
 
-void sensorSetup() {
-  gStream = new MUARTSingleStream(&gMultiuart, 0);
-  gStream->begin(9600);
-  gSensor = new A02YYUWviaUARTStream(gStream, 8, true);
+// Set up for 1 sensor test
+void sensor1Setup() {
+  gStream1 = new MUARTSingleStream(&gMultiuart, 0);
+  gStream1->begin(9600);
+  gSensor1 = new A02YYUW::A02YYUWviaUARTStream(gStream1, 8, true);
 
-  // Set up debugger interface
-  gDebugger = new SerialDebugger(115200);
+  setupDebugger();
+}
+
+// Set up for 2 sensors test
+void sensorsSetup() {
+  gStream1 = new MUARTSingleStream(&gMultiuart, 0);
+  gStream1->begin(9600);
+  gSensor1 = new A02YYUW::A02YYUWviaUARTStream(gStream1, 8, true);
+  
+  gStream2 = new MUARTSingleStream(&gMultiuart, 1);
+  gStream2->begin(9600);
+  gSensor2 = new A02YYUW::A02YYUWviaUARTStream(gStream2, 9, true);
+
+  setupDebugger();
 }
 
 void setup() {
 
+  // gMultiuart = new MULTIUART(53);
   //SPI Prescaler Options
   //SPI_CLOCK_DIV4 / SPI_CLOCK_DIV16 / SPI_CLOCK_DIV64
   //SPI_CLOCK_DIV128 / SPI_CLOCK_DIV2 / SPI_CLOCK_DIV8 / SPI_CLOCK_DIV32
@@ -74,10 +108,15 @@ void setup() {
   
   // simpleDirectHexReaderSetup();
   // singleStreamReaderSetup();
-  sensorSetup();
+  // sensor1Setup();
+  sensorsSetup();
 
 }
 
+/*******************
+ * Loop functions
+ *******************/
+// Loop for MULTIUART on its own
 void simpleDirectHexReaderLoop() {
 
   uint8_t len = gMultiuart.checkRx(0);	//Check UART 0 for incoming data
@@ -96,15 +135,15 @@ void simpleDirectHexReaderLoop() {
 
 }
 
-// Does the same thing as the MULTIUART library only loop for simplicity
+// Does the same thing (almost) as the MULTIUART library only loop for simplicity
 void singleStreamReaderLoop() {
 
-  uint8_t len = gStream->available();	//Check UART 0 for incoming data
+  uint8_t len = gStream1->available();	//Check UART 0 for incoming data
   Serial.print(String(millis()) + ": UART 0: " + String(len) + " bytes");
   if (len > 0) {
     Serial.print(": ");
     for (uint8_t i = 0; i < len; i++) {
-      uint8_t b = gStream->read();
+      uint8_t b = gStream1->read();
       Serial.print(formatByteToIntelString(b));
       Serial.print(" ");
     }
@@ -115,18 +154,35 @@ void singleStreamReaderLoop() {
 
 }
 
-void sensorLoop() {
+// Loop for a single sensor
+void sensor1Loop() {
 
-  // Update the latest distance reading on the sensor (self-throttling)
-  gSensor->readDistance();
+  // Update the latest distance reading on the sensors (self-throttling)
+  gSensor1->readDistance();
 
   // Lets see what we've got
-  gDebugger->updateValue("distance / mm", gSensor->getDistance());
-  gDebugger->updateValue("last read time / ms since reset", gSensor->getLastReadTime());
-  gDebugger->updateValue("last successful read time / ms since reset", gSensor->getLastReadSuccess());
-  gDebugger->updateValue("last read status", gSensor->getLastReadStatus());
-  gDebugger->updateValue("last read result", gSensor->getLastReadResult());
-  gDebugger->updateValue("is pre-processed", gSensor->isProcessed());
+  gDebugger->updateValue("distance / mm", gSensor1->getDistance());
+  gDebugger->updateValue("last read time / ms since reset", gSensor1->getLastReadTime());
+  gDebugger->updateValue("last successful read time / ms since reset", gSensor1->getLastReadSuccess());
+  gDebugger->updateValue("last read status", gSensor1->getLastReadStatus());
+  gDebugger->updateValue("last read result", gSensor1->getLastReadResult());
+  gDebugger->updateValue("is pre-processed", gSensor1->isProcessed());
+  gDebugger->throttledPrintUpdate();
+
+}
+
+// Loop for 2 sensors
+void sensorsLoop() {
+
+  // Update the latest distance reading on the sensors (self-throttling)
+  gSensor1->readDistance();
+  gSensor2->readDistance();
+
+  // Lets see what we've got
+  gDebugger->updateValue("distance (1) / mm", gSensor1->getDistance());
+  gDebugger->updateValue("last successful read time (1) / ms since reset", gSensor1->getLastReadSuccess());
+  gDebugger->updateValue("distance (2) / mm", gSensor2->getDistance());
+  gDebugger->updateValue("last successful read time (2) / ms since reset", gSensor2->getLastReadSuccess());
   gDebugger->throttledPrintUpdate();
 
 }
@@ -135,6 +191,7 @@ void loop() {
 
   // simpleDirectHexReaderLoop();
   // singleStreamReaderLoop();
-  sensorLoop();
+  // sensor1Loop();
+  sensorsLoop();
 
 }
